@@ -1,34 +1,78 @@
-window.addEventListener('DOMContentLoaded', async function(event) {
-  let db = firebase.firestore()
-  let apiKey = 'your TMDB API key'
-  let response = await fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&language=en-US`)
-  let json = await response.json()
-  let movies = json.results
-  console.log(movies)
-  
-  for (let i=0; i<movies.length; i++) {
-    let movie = movies[i]
-    let docRef = await db.collection('watched').doc(`${movie.id}`).get()
-    let watchedMovie = docRef.data()
-    let opacityClass = ''
-    if (watchedMovie) {
-      opacityClass = 'opacity-20'
+let db = firebase.firestore()
+
+firebase.auth().onAuthStateChanged(async function(user) {
+
+  if (user) {
+    console.log('user is signed in')
+      
+    db.collection('users').doc(user.uid).set({
+        name: user.displayName,
+        email: user.email
+      })
+
+    let username=user.displayName
+    let curUserID=firebase.auth().currentUser.uid
+
+    let apiKey = 'd8731d19dcfc30a3559312f3ea845aed'
+    let response = await fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&language=en-US`)
+    let json = await response.json()
+    let movies = json.results
+    console.log(movies)
+      
+      // Sign-out button
+    document.querySelector('.sign-in-or-sign-out').innerHTML = `<div class="pt-4 px-16 text-white text-center"> Signed in as ${username}</div>
+      <button class="text-white bg-pink-500 rounded px-3 py-1 sign-out">Sign Out</button>`
+    
+    document.querySelector('.sign-out').addEventListener('click', function(event) {
+      console.log('sign out clicked')
+      firebase.auth().signOut()
+      document.location.href = 'movies.html'})
+
+    for (let i=0; i<movies.length; i++) {
+      let movie = movies[i]
+      let docRef = await db.collection('watched').doc(`${movie.id}-${curUserID}`).get()
+      let watchedMovie = docRef.data()
+      let opacityClass = ''
+      if (watchedMovie) {
+        opacityClass = 'opacity-20'
+      }
+
+      document.querySelector('.movies').insertAdjacentHTML('beforeend', `
+        <div class="w-1/5 p-4 movie-${movie.id} ${opacityClass}">
+          <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" class="w-full">
+          <a href="#" class="watched-button block text-center text-white bg-green-500 mt-4 px-4 py-2 rounded">I've watched this!</a>
+        </div>`)
+
+      document.querySelector(`.movie-${movie.id}`).addEventListener('click', async function(event) {
+        event.preventDefault()
+        let movieElement = document.querySelector(`.movie-${movie.id}`)
+        if(movieElement.classList.contains('opacity-20')){
+          event.preventDefault()
+          movieElement.classList.remove('opacity-20')
+          await db.collection('watched').doc(`${movie.id}-${curUserID}`).delete({})
+          console.log(`Movie ${movie.id} was un-watched.`)
+        } else { 
+            movieElement.classList.add('opacity-20')
+            await db.collection('watched').doc(`${movie.id}-${curUserID}`).set({})
+            console.log(`Movie ${movie.id} was watched.`)}}) 
+      }
+  } else {
+      console.log('user is signed out')
+
+      document.querySelector('.movies').classList.add('hidden')
+
+      let ui = new firebaseui.auth.AuthUI(firebase.auth())
+
+      let authUIConfig = {
+        signInOptions: [
+          firebase.auth.EmailAuthProvider.PROVIDER_ID
+        ],
+        signInSuccessUrl: 'movies.html'
+      }
+
+      // Starts FirebaseUI Auth
+      ui.start('.sign-in-or-sign-out', authUIConfig)
     }
-
-    document.querySelector('.movies').insertAdjacentHTML('beforeend', `
-      <div class="w-1/5 p-4 movie-${movie.id} ${opacityClass}">
-        <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" class="w-full">
-        <a href="#" class="watched-button block text-center text-white bg-green-500 mt-4 px-4 py-2 rounded">I've watched this!</a>
-      </div>
-    `)
-
-    document.querySelector(`.movie-${movie.id}`).addEventListener('click', async function(event) {
-      event.preventDefault()
-      let movieElement = document.querySelector(`.movie-${movie.id}`)
-      movieElement.classList.add('opacity-20')
-      await db.collection('watched').doc(`${movie.id}`).set({})
-    }) 
-  }
 })
 
 // Goal:   Refactor the movies application from last week, so that it supports
